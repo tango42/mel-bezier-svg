@@ -6,5 +6,5 @@
 
 ### Usage example
 in Maya select one or more bezier curve(s) and run in mel console:
-- source "<path>/exportCurvesSelectedToSvg.mel";
+- source "\<path\>/exportCurvesSelectedToSvg.mel";
 - exportCurvesSelectedToSvg();
