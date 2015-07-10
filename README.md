@@ -2,4 +2,4 @@
 
 Export from Maya selected curves as bezier paths to a svg file format.
 Intended for usage in inkScape. 
-NB: Inscape supports only basic bezier curves.
+NB: inkScape only supports basic bezier curves.
