@@ -1,0 +1,310 @@
+// Author:
+//     WillemHein Triemstra
+//     wh@codemans.nl
+//
+// History:
+//     2015-07-10 initial setup
+//
+
+proc float[]
+getBSplineCvs(string $curve)
+//
+// Description:
+//		...
+// Arguments:
+//		None.
+// Returns:
+//		string command
+//
+{
+    float $result [];
+    
+    int $degree = `getAttr ($curve + ".degree")`;
+    if ($degree < 3) {
+        return $result;
+    }
+
+    int $maxCVs = `getAttr ($curve + ".spans")` + $degree;
+    
+    $result = `xform -q -t -ws ($curve + ".cv[*]")`;
+    
+    return $result;
+}
+
+
+proc float[]
+getWidthHeight(float $cvs[])
+//
+// Description:
+//		...
+// Arguments:
+//		None.
+// Returns:
+//		string command
+//
+{
+    float $result[];
+    float $xmin = 0;
+    float $xmax = 0;
+    float $ymin = 0;
+    float $ymax = 0;
+    float $zmin = 0;
+    float $zmax = 0;
+
+    float$location[];    
+    int $i = 0;
+    int $max = (`size $cvs`);
+    for ($i; $i < $max; $i = $i + 3)
+    {
+        if ($i == 0) {
+            $xmin = $xmax = $cvs[$i];
+            $ymin = $ymax = $cvs[$i+1];
+            $zmin = $zmax = $cvs[$i+2];
+        } else {
+            if ($xmin > $cvs[$i]) {
+                $xmin = $cvs[$i];
+            }
+            if ($xmax < $cvs[$i]) {
+                $xmax = $cvs[$i];
+            }
+            if ($ymin > $cvs[$i+1]) {
+                $ymin = $cvs[$i+1];
+            }
+            if ($ymax < $cvs[$i+1]) {
+                $ymax = $cvs[$i+1];
+            }
+            if ($zmin > $cvs[$i+2]) {
+                $zmin = $cvs[$i+2];
+            }
+            if ($zmax < $cvs[$i+2]) {
+                $zmax = $cvs[$i+2];
+            }
+        }
+    }
+    $result[0] = $xmin;
+    $result[1] = $xmax;
+    $result[2] = $ymin;
+    $result[3] = $ymax;
+    $result[4] = $zmin;
+    $result[5] = $zmax;
+
+    return $result;
+}
+
+proc string
+askForFile()
+//
+// Description:
+//		...
+// Arguments:
+//		None.
+// Returns:
+//		string command
+//
+{
+    promptDialog -message "Enter name:" -button "Ok" -button "Cancel" -defaultButton "Ok" -cancelButton "Cancel" -dismissString "Cancel" -text "exportCurvesSelectedToSvg.svg";
+
+    return `promptDialog -query`;
+}
+
+proc float[]
+getCurveCvs(string $curve)
+//
+// Description:
+//		...
+// Arguments:
+//		None.
+// Returns:
+//		int 0 or 1 for success
+//
+{
+	float $cvs[];
+
+    int $degree = `getAttr ($curve).degree`;
+    if ($degree < 3) {
+    	print ("Sorry, curve '" + $curve + "' needs to be of degree 3!");
+        return $cvs;
+    }
+
+    string $duplicate[] = `duplicate -rr`;
+    nurbsCurveToBezier;
+    $cvs = `getBSplineCvs($duplicate[0])`;
+
+    return $cvs;
+}
+
+proc string
+svgTemplate()
+{
+	string $template = "";
+	$template = $template + "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"no\"?>\n";
+	$template = $template + "<svg id=\"main\" width=\"%width%\" height=\"%height%\" xmlns=\"http://www.w3.org/2000/svg\">\n";
+	$template = $template + "    <g id=\"frame\" transform=\"translate(%trans_x%, %trans_y%) scale(1, -1)\">\n";
+	$template = $template + "%paths%";
+	$template = $template + "    </g>\n";
+	$template = $template + "</svg>\n";
+
+	return $template;
+}
+
+proc string
+pathTemplate()
+{
+	string $template = "";
+	$template = $template + "<path d=\"M %mx% ,%my% C %points% \" ";
+	$template = $template + "id=\"line16832\" ";
+	$template = $template + "style=\"fill:none;stroke:#000000;stroke-width:1;stroke-miterlimit:4;stroke-dasharray:none;stroke-opacity:1\" />";
+
+	return $template;
+}
+
+proc writeToFile(string $result)
+//
+// Description:
+//		...
+// Arguments:
+//		None.
+// Returns:
+//		int 0 or 1 for success
+//
+{
+//$exampleFileName = ( `internalVar -userWorkspaceDir` + "example.tmp" );
+//$fileId1 = `fopen $exampleFileName "w"`;
+//fprint $fileId1 "Hello there\n";
+//fclose $fileId1;
+
+	string $fileName = askForFile();
+	if ($fileName == "") {
+		return;
+	}
+	$fileName = ( `internalVar -userWorkspaceDir` + $fileName );
+
+	$fileId = `fopen $fileName "w"`;
+	if ($fileId) {
+		fprint $fileId $result;
+		fclose $fileId;
+	}
+
+	print ($result);
+}
+
+proc float[]
+filterCvs(float $cvs[], int $x, int $y)
+{
+	float $result[];
+    int $index = 0;
+    float $scale = 100.0;
+	
+    int $i = 0;
+    int $max = (`size $cvs`);
+    for ($i; $i < $max; $i = $i + 3)
+    {
+    	$result[$index] = $scale * $cvs[$i + $x];
+    	$result[$index + 1] = $scale * $cvs[$i + $y];
+    	$index = $index + 2;
+    }
+    return $result;
+}
+
+proc float[]
+getUnifiedCvs(float $cvs[])
+//
+// Description:
+//		Choose plane where the min/max differences for the normal axes are the smallest
+// Arguments:
+//		List of cv's (3 axes).
+// Returns:
+//		List of cv's (2 axes)
+{
+	float $whd[] = `getWidthHeight($cvs)`;
+	float $dx = abs($whd[1] - $whd[0]);
+	float $dy = abs($whd[3] - $whd[2]);
+	float $dz = abs($whd[5] - $whd[4]);
+
+	if ($dx < $dy && $dx < $dz) {
+		return filterCvs($cvs, 1, 2);
+	}
+	if ($dy < $dx && $dy < $dz) {
+		return filterCvs($cvs, 0, 2);
+	}
+	return filterCvs($cvs, 0, 1);
+}
+
+proc string
+getPathFromCvs(float $cvs[])
+{
+	string $regularExpr;
+	string $output = `pathTemplate`;
+	string $points = "";
+
+    int $i = 0;
+    int $max = (`size $cvs`);
+    print ($max + "\n");
+    for ($i; $i < $max; $i = $i + 2)
+    {
+    	if ($i == 0) {
+			$regularExpr = "%mx%";
+			print ($output + "\n");
+			print ($output + "\n");
+			$output = `substitute $regularExpr $output ("" + $cvs[$i])`;
+			print ($output + "\n");
+			$regularExpr = "%my%";
+			$output = `substitute $regularExpr $output ("" + $cvs[$i + 1])`;
+			print ($output + "\n");
+    	} else {
+    		$points = $points + $cvs[$i] + ",";
+    		$points = $points + $cvs[$i + 1] + " ";
+    	}    	
+    }
+	$regularExpr = "%points%";
+	$output = `substitute $regularExpr $output $points`;
+
+    return $output;
+}
+
+global proc
+exportCurvesSelectedToSvg()
+//
+// Description:
+//		Export selected curves as bezier curves to svg.
+//      Intended for usage in inkScape. Inscape supports only basic bezier curves.
+//
+{
+	string $result = "";
+	string $paths = "";
+	string $selected[] = `ls -sl`;
+
+	string $item;
+	float $cvs[];
+	float $width = 1;
+	float $height = 1;
+	for ($item in $selected) {
+		select -r $item;
+		$cvs = `getCurveCvs $item`;
+		$cvs = `getUnifiedCvs($cvs)`;
+		if (`size $cvs` > 0) {
+			$paths = $paths + `getPathFromCvs($cvs)` + "\n";
+			//$result = $result + $item + "\n";
+		}
+
+	    // cleanup
+		doDelete;
+	}
+	string $regularExpr = "%paths%";
+	string $template = `svgTemplate`;
+	string $output = `substitute $regularExpr $template $paths`;
+	$regularExpr = "%width%";
+	$output = `substitute $regularExpr $output "400.0"`;
+	$regularExpr = "%height%";
+	$output = `substitute $regularExpr $output "300.0"`;
+	$regularExpr = "%trans_x%";
+	$output = `substitute $regularExpr $output "0.0"`;
+	$regularExpr = "%trans_y%";
+	$output = `substitute $regularExpr $output "0.0"`;
+
+	print ($output);
+
+	select -r $selected;
+
+	writeToFile($output);
+}
