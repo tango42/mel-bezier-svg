@@ -262,6 +262,36 @@ getPathFromCvs(float $cvs[])
     return $output;
 }
 
+proc
+updateBoundingBox(float $cvs [], float $boundingBox [])
+{
+	int $i = 0;
+    int $max = (`size $cvs`);
+    for ($i; $i < $max; $i = $i + 2)
+    {
+    	if ($i == 0 && $boundingBox[0] == 0 && $boundingBox[1] == 0 && $boundingBox[2] == 0 && $boundingBox[3] == 0) {
+    		$boundingBox[0] = $boundingBox[1] = $cvs[$i];
+    		$boundingBox[2] = $boundingBox[3] = $cvs[$i + 1];
+    	}
+    	// xmin
+    	if ($boundingBox[0] > $cvs[$i]) {
+    		$boundingBox[0] = $cvs[$i];
+    	}
+    	// xmax
+    	if ($boundingBox[1] < $cvs[$i]) {
+    		$boundingBox[1] = $cvs[$i];
+    	}
+    	// ymin
+    	if ($boundingBox[2] > $cvs[$i + 1]) {
+    		$boundingBox[2] = $cvs[$i + 1];
+    	}
+    	// ymax
+    	if ($boundingBox[3] < $cvs[$i + 1]) {
+    		$boundingBox[3] = $cvs[$i + 1];
+    	}
+    }	
+}
+
 global proc
 exportCurvesSelectedToSvg()
 //
@@ -273,6 +303,8 @@ exportCurvesSelectedToSvg()
 	string $result = "";
 	string $paths = "";
 	string $selected[] = `ls -sl`;
+	float $boundingBox[] = {0.0, 0.0, 0.0, 0.0}; //xmin. xmax, ymin, ymax
+	float $margin = 50.0;
 
 	string $item;
 	float $cvs[];
@@ -282,9 +314,10 @@ exportCurvesSelectedToSvg()
 		select -r $item;
 		$cvs = `getCurveCvs $item`;
 		$cvs = `getUnifiedCvs($cvs)`;
+		updateBoundingBox($cvs, $boundingBox);
+		print ($boundingBox);
 		if (`size $cvs` > 0) {
 			$paths = $paths + `getPathFromCvs($cvs)` + "\n";
-			//$result = $result + $item + "\n";
 		}
 
 	    // cleanup
@@ -293,16 +326,22 @@ exportCurvesSelectedToSvg()
 	string $regularExpr = "%paths%";
 	string $template = `svgTemplate`;
 	string $output = `substitute $regularExpr $template $paths`;
-	$regularExpr = "%width%";
-	$output = `substitute $regularExpr $output "400.0"`;
-	$regularExpr = "%height%";
-	$output = `substitute $regularExpr $output "300.0"`;
-	$regularExpr = "%trans_x%";
-	$output = `substitute $regularExpr $output "0.0"`;
-	$regularExpr = "%trans_y%";
-	$output = `substitute $regularExpr $output "0.0"`;
 
-	print ($output);
+	$regularExpr = "%width%";
+	float $ww = $boundingBox[1] - $boundingBox[0] + 2 * $margin;
+	$output = `substitute $regularExpr $output ("" + $ww)`;
+	$regularExpr = "%height%";
+	float $hh = $boundingBox[3] - $boundingBox[2] + 2 * $margin;
+	$output = `substitute $regularExpr $output ("" + $hh)`;
+	$regularExpr = "%trans_x%";
+	float $dx = -1.0 * `trunc($boundingBox[0])` + $margin;
+	$output = `substitute $regularExpr $output ("" + $dx)`;
+	$regularExpr = "%trans_y%";
+	float $dy = 1.0 * `trunc($boundingBox[3])` + $margin;
+	$output = `substitute $regularExpr $output ("" + $dy)`;
+
+	print ($output + "\n");
+	print ($boundingBox);
 
 	select -r $selected;
 
